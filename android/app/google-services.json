@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "895043446380",
+    "project_id": "gachita-788fe",
+    "storage_bucket": "gachita-788fe.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:895043446380:android:29033e42af66ce652cda49",
+        "android_client_info": {
+          "package_name": "com.example.ff"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMZV87qSOy7vh7pl64fZIacMb4w399oyA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

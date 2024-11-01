@@ -10,55 +10,46 @@ class RoomProvider with ChangeNotifier {
 
   // 실시간 방 목록 스트림
   Stream<List<RoomModel>> getRoomsStream() {
-    return _firestore.collection('rooms')
-        .snapshots()
-        .map((snapshot) {
+    return _firestore.collection('rooms').snapshots().map((snapshot) {
       return snapshot.docs
-          .map((doc) => RoomModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .map((doc) =>
+              RoomModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList();
     });
   }
 
   // 단일 방 스트림 (null 안전성 추가)
   Stream<RoomModel?> getRoomStream(String roomId) {
-    return _firestore.collection('rooms')
-        .doc(roomId)
-        .snapshots()
-        .map((doc) {
+    return _firestore.collection('rooms').doc(roomId).snapshots().map((doc) {
       if (!doc.exists) return null;
       return RoomModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
     });
   }
 
   // 방 생성
-  Future<RoomModel?> createRoom(String title, String creatorUid) async {
+  Future<String> createRoom(String creatorUid, String title) async {
     try {
-      DocumentReference docRef = await _firestore.collection('rooms').add({
-        'title': title,
+      DocumentReference roomRef = await _firestore.collection('rooms').add({
         'creatorUid': creatorUid,
+        'title': title,
         'users': [creatorUid],
         'payments': {},
-        'settle': false,
+        'history': [],
         'isSettling': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
-
-      DocumentSnapshot doc = await docRef.get();
-      if (doc.exists) {
-        notifyListeners();
-        return RoomModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-      }
-      return null;
+      return roomRef.id;
     } catch (e) {
       print('Error creating room: $e');
-      return null;
+      throw e;
     }
   }
 
   // 방 참가
   Future<bool> joinRoom(String roomId, String userId) async {
     try {
-      DocumentSnapshot room = await _firestore.collection('rooms').doc(roomId).get();
+      DocumentSnapshot room =
+          await _firestore.collection('rooms').doc(roomId).get();
       if (room.exists) {
         List<dynamic> users = room.get('users') as List<dynamic>;
         if (users.length < 4) {
@@ -79,7 +70,8 @@ class RoomProvider with ChangeNotifier {
   // 방 나가기
   Future<void> leaveRoom(String roomId, String userId) async {
     try {
-      DocumentSnapshot room = await _firestore.collection('rooms').doc(roomId).get();
+      DocumentSnapshot room =
+          await _firestore.collection('rooms').doc(roomId).get();
       if (room.exists) {
         await _firestore.collection('rooms').doc(roomId).update({
           'users': FieldValue.arrayRemove([userId]),
@@ -102,7 +94,8 @@ class RoomProvider with ChangeNotifier {
   }
 
   // 결제 상태 업데이트
-  Future<void> updatePaymentStatus(String roomId, String userId, bool status) async {
+  Future<void> updatePaymentStatus(
+      String roomId, String userId, bool status) async {
     try {
       await _firestore.collection('rooms').doc(roomId).update({
         'payments.$userId': status,
@@ -130,7 +123,8 @@ class RoomProvider with ChangeNotifier {
   // 방 정보 가져오기
   Future<RoomModel?> getRoom(String roomId) async {
     try {
-      DocumentSnapshot doc = await _firestore.collection('rooms').doc(roomId).get();
+      DocumentSnapshot doc =
+          await _firestore.collection('rooms').doc(roomId).get();
       if (doc.exists) {
         return RoomModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }
@@ -146,11 +140,23 @@ class RoomProvider with ChangeNotifier {
     try {
       QuerySnapshot snapshot = await _firestore.collection('rooms').get();
       _rooms = snapshot.docs
-          .map((doc) => RoomModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .map((doc) =>
+              RoomModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList();
       notifyListeners();
     } catch (e) {
       print('Error fetching rooms: $e');
+    }
+  }
+
+  Future<void> startSettlement(String roomId) async {
+    try {
+      await _firestore.collection('rooms').doc(roomId).update({
+        'isSettling': true, // 정산 시작 상태로 변경
+      });
+    } catch (e) {
+      print('Error starting settlement: $e');
+      throw e;
     }
   }
 }

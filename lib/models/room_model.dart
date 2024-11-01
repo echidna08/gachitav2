@@ -4,6 +4,7 @@ class RoomModel {
   final String creatorUid;
   final List<String> users;
   final Map<String, bool> payments;
+  final List<Map<String, dynamic>> history;
   final bool isSettling;
 
   RoomModel({
@@ -11,9 +12,11 @@ class RoomModel {
     required this.title,
     required this.creatorUid,
     required this.users,
-    required this.payments,
-    required this.isSettling,
-  });
+    Map<String, bool>? payments,
+    List<Map<String, dynamic>>? history,
+    this.isSettling = false,
+  })  : this.payments = payments ?? {},
+        this.history = history ?? [];
 
   factory RoomModel.fromMap(Map<String, dynamic> data, String id) {
     return RoomModel(
@@ -22,6 +25,7 @@ class RoomModel {
       creatorUid: data['creatorUid'] ?? '',
       users: List<String>.from(data['users'] ?? []),
       payments: Map<String, bool>.from(data['payments'] ?? {}),
+      history: List<Map<String, dynamic>>.from(data['history'] ?? []),
       isSettling: data['isSettling'] ?? false,
     );
   }
@@ -32,6 +36,7 @@ class RoomModel {
       'creatorUid': creatorUid,
       'users': users,
       'payments': payments,
+      'history': history,
       'isSettling': isSettling,
     };
   }

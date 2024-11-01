@@ -9,65 +9,121 @@ class HomeScreen extends StatelessWidget {
     final authProvider = Provider.of<AuthProvider>(context);
 
     return Scaffold(
-      backgroundColor: Color(0xFFFFFFFF),
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Color(0xFFFFFFFF),
+        backgroundColor: Colors.white,
+        elevation: 0,
         title: Text(
           '같이TA',
           style: TextStyle(
-            fontSize: 50,
-            fontFamily: 'WAGURI',
+            fontSize: 24,
+            fontFamily: 'Pretendard',
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF4A55A2),
           ),
         ),
+        centerTitle: true,
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Image.asset(
-              'assets/symbol.png',
-              width: 300,
-              height: 300,
-            ),
-            SizedBox(height: 20),
-            const Text(
-              '로그인을 해주세요!',
-              style: TextStyle(
-                fontSize: 23,
-                fontFamily: 'WAGURI',
-              ),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => LoginScreen()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                fixedSize: Size(200, 65),
-              ),
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: const Text(
-                  '로그인',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontFamily: 'WAGURI',
-                  ),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      child: Column(
+                        children: [
+                          Image.asset(
+                            'assets/symbol.png',
+                            width: 200,
+                            height: 200,
+                          ),
+                          SizedBox(height: 40),
+                          Text(
+                            '환영합니다!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontFamily: 'Pretendard',
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            '서비스 이용을 위해 로그인해 주세요',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontFamily: 'Pretendard',
+                              fontWeight: FontWeight.w400,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          SizedBox(height: 32),
+                          Container(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) => LoginScreen()),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color(0xFF4A55A2),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shadowColor: Colors.transparent,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '로그인하기',
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontFamily: 'Pretendard',
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 16,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 150),
+                          Text(
+                            'made by Software',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontFamily: 'WAGURI',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            SizedBox(height: 150),
-            Text(
-              'made by Software',
-              style: TextStyle(
-                fontSize: 15,
-                fontFamily: 'WAGURI',
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

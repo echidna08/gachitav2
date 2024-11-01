@@ -41,35 +41,33 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           fontFamily: 'WAGURI',
         ),
-        initialRoute: '/',
+        home: HomeScreen(),
+        routes: {
+          '/login': (context) => LoginScreen(),
+          '/main': (context) => NewMainScreen(),
+          '/rooms': (context) => RoomListScreen(),
+          '/mileage_recharge': (context) => MileageRechargeScreen(),
+        },
         onGenerateRoute: (settings) {
           switch (settings.name) {
-            case '/':
-              return MaterialPageRoute(builder: (_) => HomeScreen());
-            case '/login':
-              return MaterialPageRoute(builder: (_) => LoginScreen());
-            case '/main':
-              return MaterialPageRoute(builder: (_) => NewMainScreen());
-            case '/rooms':
-              return MaterialPageRoute(builder: (_) => RoomListScreen());
             case '/room':
               final args = settings.arguments as Map<String, dynamic>?;
               return MaterialPageRoute(
                 builder: (_) => RoomScreen(roomId: args?['roomId'] ?? ''),
               );
-            case '/settlement':
+            case '/settlement_confirmation':
               final args = settings.arguments as Map<String, dynamic>?;
               return MaterialPageRoute(
-                builder: (_) => SettlementConfirmationScreen(roomId: args?['roomId'] ?? ''),
+                builder: (_) => SettlementConfirmationScreen(
+                  roomId: args?['roomId'] ?? '',
+                  isCreator: args?['isCreator'] ?? false,
+                ),
               );
             case '/payment_instruction':
               final args = settings.arguments as Map<String, dynamic>?;
               return MaterialPageRoute(
-                builder: (_) => PaymentInstructionScreen(roomId: args?['roomId'] ?? ''),
-              );
-            case '/mileage_recharge':
-              return MaterialPageRoute(
-                builder: (_) => MileageRechargeScreen(),
+                builder: (_) =>
+                    PaymentInstructionScreen(roomId: args?['roomId'] ?? ''),
               );
             default:
               return MaterialPageRoute(builder: (_) => HomeScreen());

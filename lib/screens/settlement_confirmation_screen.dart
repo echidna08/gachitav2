@@ -2,90 +2,320 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/room_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/mileage_provider.dart';
 import '../models/room_model.dart';
 import 'room_list_screen.dart';
+import 'room_screen.dart';
+import 'payment_instruction_screen.dart';
 
 class SettlementConfirmationScreen extends StatelessWidget {
   final String roomId;
+  final bool isCreator;
 
-  SettlementConfirmationScreen({required this.roomId});
+  SettlementConfirmationScreen({
+    required this.roomId,
+    required this.isCreator,
+  });
 
   @override
   Widget build(BuildContext context) {
     final roomProvider = Provider.of<RoomProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
+    final mileageProvider = Provider.of<MileageProvider>(context);
+    bool hasShownSnackBar = false;
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text(
-          '정산 확인',
-          style: TextStyle(
-            fontFamily: 'WAGURI',
-            fontSize: 30,
-          ),
-        ),
-      ),
-      body: StreamBuilder<RoomModel?>(
+    return WillPopScope(
+      onWillPop: () async => true,
+      child: StreamBuilder<RoomModel?>(
         stream: roomProvider.getRoomStream(roomId),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
           if (!snapshot.hasData || snapshot.data == null) {
-            return Center(child: Text('방을 찾을 수 없습니다.'));
+            return Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
           }
 
-          RoomModel room = snapshot.data!;
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '다른 사용자들이 송금했는지 확인합니다.',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontFamily: 'WAGURI',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 20),
-                ...room.users.where((userId) => userId != room.creatorUid).map((userId) {
-                  bool hasPaid = room.payments[userId] ?? false;
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        userId, // 실제로는 사용자 이름을 표시해야 합니다
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontFamily: 'WAGURI',
-                        ),
+          final room = snapshot.data!;
+          final currentUserId = authProvider.user?.uid;
+
+          if (currentUserId == null) {
+            return Scaffold(
+              body: Center(child: Text('사용자 정보를 불러올 수 없습니다.')),
+            );
+          }
+
+          if (!isCreator &&
+              room.payments[currentUserId] == true &&
+              !hasShownSnackBar) {
+            hasShownSnackBar = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (Navigator.canPop(context)) {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '송금이 완료되었습니다',
+                      style: TextStyle(
+                        fontFamily: 'Pretendard',
+                        fontWeight: FontWeight.w500,
                       ),
-                      Icon(
-                        hasPaid ? Icons.check_circle : Icons.cancel,
-                        color: hasPaid ? Colors.green : Colors.red,
-                        size: 30.0,
-                      ),
-                    ],
-                  );
-                }).toList(),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => _confirmPayments(context),
-                  child: Text(
-                    '확인',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontFamily: 'WAGURI',
                     ),
+                    backgroundColor: Color(0xFF4A55A2),
+                    duration: Duration(seconds: 2),
                   ),
+                );
+              }
+            });
+          }
+
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(
+                isCreator ? '정산 관리' : '송금하기',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
                 ),
-              ],
+              ),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back_ios, color: Colors.black87),
+                onPressed: () {
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                },
+              ),
+            ),
+            body: FutureBuilder<String?>(
+              future: authProvider.user?.uid != null
+                  ? authProvider.getUserEmail(authProvider.user!.uid)
+                  : Future.value(null),
+              builder: (context, userSnapshot) {
+                if (!userSnapshot.hasData) {
+                  return Center(child: CircularProgressIndicator());
+                }
+
+                return StreamBuilder<RoomModel?>(
+                  stream: roomProvider.getRoomStream(roomId),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || snapshot.data == null) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    final room = snapshot.data!;
+                    if (!room.isSettling) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '정산이 완료되었습니다',
+                              style: TextStyle(
+                                fontFamily: 'Pretendard',
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            backgroundColor: Color(0xFF4A55A2),
+                          ),
+                        );
+                      });
+                    }
+
+                    final currentUserId = authProvider.user?.uid;
+
+                    if (currentUserId == null) {
+                      return Center(child: Text('사용자 정보를 불러올 수 없습니다.'));
+                    }
+
+                    final currentUserPaid =
+                        room.payments?[currentUserId] ?? false;
+                    final isCurrentUserCreator =
+                        room.creatorUid == currentUserId;
+                    final allPaid = room.users.every((userId) =>
+                        userId == room.creatorUid ||
+                        (room.payments?[userId] ?? false));
+
+                    if (allPaid) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '모든 참가자의 송금이 완료되었습니다',
+                              style: TextStyle(
+                                fontFamily: 'Pretendard',
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            backgroundColor: Color(0xFF4A55A2),
+                          ),
+                        );
+                      });
+                    }
+
+                    return Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isCreator ? '참가자 송금 현황' : '송금 정보',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontFamily: 'Pretendard',
+                              fontWeight: FontWeight.w400,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          SizedBox(height: 24),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: room.users.length,
+                              itemBuilder: (context, index) {
+                                final userId = room.users[index];
+                                final isPaid = room.payments?[userId] ?? false;
+                                final isRoomCreator = userId == room.creatorUid;
+
+                                return FutureBuilder<String?>(
+                                  future: authProvider.getUserEmail(userId),
+                                  builder: (context, emailSnapshot) {
+                                    final userEmail =
+                                        emailSnapshot.data ?? 'Loading...';
+
+                                    return Container(
+                                      margin: EdgeInsets.only(bottom: 12),
+                                      padding: EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[50],
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                            color: Colors.grey[200]!),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: (isPaid || isRoomCreator)
+                                                  ? Color(0xFF4A55A2)
+                                                      .withOpacity(0.1)
+                                                  : Colors.red[50],
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              (isPaid || isRoomCreator)
+                                                  ? Icons.check_circle_outline
+                                                  : Icons.timer,
+                                              size: 20,
+                                              color: (isPaid || isRoomCreator)
+                                                  ? Color(0xFF4A55A2)
+                                                  : Colors.red[400],
+                                            ),
+                                          ),
+                                          SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  userEmail,
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontFamily: 'Pretendard',
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.black87,
+                                                  ),
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  isRoomCreator
+                                                      ? '방장'
+                                                      : (isPaid
+                                                          ? '송금 완료'
+                                                          : '송금 대기'),
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontFamily: 'Pretendard',
+                                                    fontWeight: FontWeight.w400,
+                                                    color: Colors.black54,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                          if (!isCreator &&
+                              !currentUserPaid &&
+                              !isCurrentUserCreator) ...[
+                            SizedBox(height: 24),
+                            Container(
+                              width: double.infinity,
+                              height: 56,
+                              child: ElevatedButton(
+                                onPressed: () => _sendPayment(
+                                    context, room, mileageProvider),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Color(0xFF4A55A2),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: Text(
+                                  '돈 보내기',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontFamily: 'Pretendard',
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (isCreator && !allPaid) ...[
+                            SizedBox(height: 24),
+                            Container(
+                              width: double.infinity,
+                              height: 56,
+                              child: ElevatedButton(
+                                onPressed: () =>
+                                    _completeSettlement(context, room),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Color(0xFF4A55A2),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: Text(
+                                  '정산 완료',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontFamily: 'Pretendard',
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           );
         },
@@ -93,80 +323,95 @@ class SettlementConfirmationScreen extends StatelessWidget {
     );
   }
 
-  void _confirmPayments(BuildContext context) async {
-    bool confirm = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            '확인',
-            style: TextStyle(
-              fontFamily: 'WAGURI',
-              fontSize: 20,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '정말 모든 사용자들이 송금했는지',
-                style: TextStyle(
-                  fontFamily: 'WAGURI',
-                  fontSize: 15,
-                ),
-              ),
-              Text(
-                '확인하셨습니까?',
-                style: TextStyle(
-                  fontFamily: 'WAGURI',
-                  color: Colors.red,
-                  fontSize: 17,
-                ),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                '취소',
-                style: TextStyle(
-                  fontFamily: 'WAGURI',
-                  fontSize: 15,
-                  color: Colors.blue,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                '확인',
-                style: TextStyle(
-                  fontFamily: 'WAGURI',
-                  fontSize: 15,
-                  color: Colors.red,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    ) ?? false;
-
-    if (confirm) {
+  Future<void> _sendPayment(BuildContext context, RoomModel room,
+      MileageProvider mileageProvider) async {
+    try {
       final roomProvider = Provider.of<RoomProvider>(context, listen: false);
-      try {
-        await roomProvider.deleteRoom(roomId);
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => RoomListScreen()),
-              (Route<dynamic> route) => false,
-        );
-      } catch (e) {
+      final userId =
+          Provider.of<AuthProvider>(context, listen: false).user!.uid;
+
+      await mileageProvider.deductMileage(1000);
+
+      await roomProvider.updatePaymentStatus(room.id, userId, true);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '송금 처리 중 오류가 발생했습니다',
+            style: TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: Colors.red[400],
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _completeSettlement(BuildContext context, RoomModel room) async {
+    try {
+      final roomProvider = Provider.of<RoomProvider>(context, listen: false);
+
+      // 모든 사용자가 송금했는지 확인
+      bool allPaid = room.users.every((userId) =>
+          userId == room.creatorUid || room.payments[userId] == true);
+
+      if (!allPaid) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('방을 삭제하는 중 오류가 발생했습니다: $e')),
+          SnackBar(
+            content: Text(
+              '아직 모든 참가자가 송금을 완료하지 않았습니다',
+              style: TextStyle(
+                fontFamily: 'Pretendard',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            backgroundColor: Colors.red[400],
+          ),
         );
+        return;
       }
+
+      // 정산 완료 상태로 업데이트
+      await roomProvider.updateRoomSettleStatus(room.id, false);
+
+      if (!context.mounted) return;
+
+      // 정산 완료 후 방 목록으로 이동
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '정산이 완료되었습니다',
+            style: TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: Color(0xFF4A55A2),
+        ),
+      );
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => RoomListScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '정산 완료 처리 중 오류가 발생했습니다',
+            style: TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: Colors.red[400],
+        ),
+      );
     }
   }
 }

@@ -7,6 +7,7 @@ import '../models/room_model.dart';
 import 'room_list_screen.dart';
 import 'room_screen.dart';
 import 'payment_instruction_screen.dart';
+import 'new_main_screen.dart';
 
 class SettlementConfirmationScreen extends StatelessWidget {
   final String roomId;
@@ -49,22 +50,28 @@ class SettlementConfirmationScreen extends StatelessWidget {
               !hasShownSnackBar) {
             hasShownSnackBar = true;
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (Navigator.canPop(context)) {
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      '송금이 완료되었습니다',
-                      style: TextStyle(
-                        fontFamily: 'Pretendard',
-                        fontWeight: FontWeight.w500,
-                      ),
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '송금이 완료되었습니다',
+                    style: TextStyle(
+                      fontFamily: 'Pretendard',
+                      fontWeight: FontWeight.w500,
                     ),
-                    backgroundColor: Color(0xFF4A55A2),
-                    duration: Duration(seconds: 2),
                   ),
-                );
-              }
+                  backgroundColor: Color(0xFF4A55A2),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            });
+          }
+
+          if (!room.isSettling && isCreator) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => RoomListScreen()),
+                (route) => false,
+              );
             });
           }
 
@@ -109,18 +116,9 @@ class SettlementConfirmationScreen extends StatelessWidget {
                     final room = snapshot.data!;
                     if (!room.isSettling) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '정산이 완료되었습니다',
-                              style: TextStyle(
-                                fontFamily: 'Pretendard',
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            backgroundColor: Color(0xFF4A55A2),
-                          ),
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (context) => RoomListScreen()),
+                          (route) => false,
                         );
                       });
                     }
@@ -139,9 +137,9 @@ class SettlementConfirmationScreen extends StatelessWidget {
                         userId == room.creatorUid ||
                         (room.payments?[userId] ?? false));
 
-                    if (allPaid) {
+                    if (allPaid && isCreator && !hasShownSnackBar) {
+                      hasShownSnackBar = true;
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -152,6 +150,7 @@ class SettlementConfirmationScreen extends StatelessWidget {
                               ),
                             ),
                             backgroundColor: Color(0xFF4A55A2),
+                            duration: Duration(seconds: 2),
                           ),
                         );
                       });
@@ -284,14 +283,14 @@ class SettlementConfirmationScreen extends StatelessWidget {
                               ),
                             ),
                           ],
-                          if (isCreator && !allPaid) ...[
+                          if (isCreator) ...[
                             SizedBox(height: 24),
                             Container(
                               width: double.infinity,
                               height: 56,
                               child: ElevatedButton(
                                 onPressed: () =>
-                                    _completeSettlement(context, room),
+                                    _completeSettlement(context, roomId),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Color(0xFF4A55A2),
                                   shape: RoundedRectangleBorder(
@@ -327,10 +326,17 @@ class SettlementConfirmationScreen extends StatelessWidget {
       MileageProvider mileageProvider) async {
     try {
       final roomProvider = Provider.of<RoomProvider>(context, listen: false);
-      final userId =
-          Provider.of<AuthProvider>(context, listen: false).user!.uid;
+      final userId = Provider.of<AuthProvider>(context, listen: false).user!.uid;
 
-      await mileageProvider.deductMileage(1000);
+      // 택시비 총액
+      int totalAmount = 4800;  // 실제 택시비로 수정
+      
+      // 인원수로 나누기
+      int numberOfUsers = room.users.length;
+      int amountPerPerson = totalAmount ~/ numberOfUsers;
+
+      // 인당 금액만큼 차감
+      await mileageProvider.deductMileage(amountPerPerson);
 
       await roomProvider.updatePaymentStatus(room.id, userId, true);
     } catch (e) {
@@ -351,36 +357,16 @@ class SettlementConfirmationScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _completeSettlement(BuildContext context, RoomModel room) async {
+  Future<void> _completeSettlement(BuildContext context, String roomId) async {
     try {
       final roomProvider = Provider.of<RoomProvider>(context, listen: false);
-
-      // 모든 사용자가 송금했는지 확인
-      bool allPaid = room.users.every((userId) =>
-          userId == room.creatorUid || room.payments[userId] == true);
-
-      if (!allPaid) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '아직 모든 참가자가 송금을 완료하지 않았습니다',
-              style: TextStyle(
-                fontFamily: 'Pretendard',
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            backgroundColor: Colors.red[400],
-          ),
-        );
-        return;
-      }
-
-      // 정산 완료 상태로 업데이트
-      await roomProvider.updateRoomSettleStatus(room.id, false);
+      
+      // 방 삭제 처리
+      await roomProvider.completeSettlement(roomId);
 
       if (!context.mounted) return;
 
-      // 정산 완료 후 방 목록으로 이동
+      // 방 목록으로 이동하기 전에 스낵바 표시
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -390,15 +376,21 @@ class SettlementConfirmationScreen extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
-          backgroundColor: Color(0xFF4A55A2),
+          backgroundColor: Colors.green[400],
+          duration: Duration(seconds: 2),
         ),
       );
 
+      // 잠시 대기 후 화면 이동 (스낵바가 보일 수 있도록)
+      await Future.delayed(Duration(milliseconds: 500));
+      
+      if (!context.mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => RoomListScreen()),
         (route) => false,
       );
     } catch (e) {
+      print('Settlement error: $e');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -410,6 +402,7 @@ class SettlementConfirmationScreen extends StatelessWidget {
             ),
           ),
           backgroundColor: Colors.red[400],
+          duration: Duration(seconds: 2),
         ),
       );
     }

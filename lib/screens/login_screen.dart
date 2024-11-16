@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/mileage_provider.dart';
+import '../screens/new_main_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -13,6 +14,82 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  Future<void> signIn(BuildContext context) async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '이메일과 비밀번호를 입력해주세요',
+            style: TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: Colors.red[400],
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final mileageProvider = Provider.of<MileageProvider>(context, listen: false);
+      
+      await authProvider.signIn(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+        mileageProvider,
+      );
+
+      // 로그인 성공 시 NewMainScreen으로 이동
+      if (!context.mounted) return;
+      
+      // 로그인 성공 후 사용자 정보가 있는지 확인
+      if (authProvider.user != null) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => NewMainScreen()),
+          (route) => false,
+        );
+      } else {
+        throw Exception('사용자 정보를 불러오는데 실패했습니다.');
+      }
+
+    } catch (e) {
+      if (!context.mounted) return;
+      String errorMessage = '로그인에 실패했습니다.';
+      
+      if (e.toString().contains('user-not-found')) {
+        errorMessage = '존재하지 않는 계정입니다.';
+      } else if (e.toString().contains('wrong-password')) {
+        errorMessage = '비밀번호가 올바르지 않습니다.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            errorMessage,
+            style: TextStyle(
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: Colors.red[400],
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -133,109 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         elevation: 0,
                         minimumSize: Size(double.infinity, 60),
                       ),
-                      onPressed: () async {
-                        if (_emailController.text.isEmpty ||
-                            _passwordController.text.isEmpty) {
-                          showDialog(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return Dialog(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                elevation: 0,
-                                backgroundColor: Colors.transparent,
-                                child: Container(
-                                  padding: EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
-                                        blurRadius: 10,
-                                        offset: Offset(0, 5),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.error_outline,
-                                        color: Color(0xFF4A55A2),
-                                        size: 48,
-                                      ),
-                                      SizedBox(height: 15),
-                                      Text(
-                                        '로그인 오류',
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontFamily: 'Pretendard',
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      SizedBox(height: 15),
-                                      Text(
-                                        '이메일과 비밀번호를 모두 입력해주세요.',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontFamily: 'Pretendard',
-                                          fontWeight: FontWeight.w400,
-                                          color: Colors.black54,
-                                        ),
-                                      ),
-                                      SizedBox(height: 20),
-                                      TextButton(
-                                        style: TextButton.styleFrom(
-                                          backgroundColor: Color(0xFF4A55A2),
-                                          minimumSize:
-                                              Size(double.infinity, 45),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        onPressed: () {
-                                          Navigator.of(context).pop();
-                                        },
-                                        child: Text(
-                                          '확인',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontFamily: 'Pretendard',
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                          return; // 입력값이 비어있으면 여기서 함수 종료
-                        }
-
-                        final authProvider =
-                            Provider.of<AuthProvider>(context, listen: false);
-                        final mileageProvider = Provider.of<MileageProvider>(
-                            context,
-                            listen: false);
-
-                        try {
-                          await authProvider.signIn(_emailController.text,
-                              _passwordController.text, mileageProvider);
-                          Navigator.pushReplacementNamed(context, '/main');
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('로그인에 실패했습니다.')),
-                          );
-                        }
-                      },
+                      onPressed: () => signIn(context),
                       child: _isLoading
                           ? SizedBox(
                               width: 24,

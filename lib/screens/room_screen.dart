@@ -18,241 +18,333 @@ class RoomScreen extends StatelessWidget {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUserId = authProvider.user?.uid;
 
-    if (currentUserId == null) {
-      return Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return StreamBuilder<RoomModel?>(
-      stream: roomProvider.getRoomStream(roomId),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data == null) {
-          return Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+    return WillPopScope(
+      onWillPop: () async {
+        if (currentUserId != null) {
+          final isCreator = (await roomProvider.getRoom(roomId))?.creatorUid == currentUserId;
+          await roomProvider.leaveRoom(roomId, currentUserId, isCreator);
         }
-
-        RoomModel room = snapshot.data!;
-        bool isCreator = room.creatorUid == currentUserId;
-        final users = room.users;
-
-        if (room.isSettling && !isCreator) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => SettlementConfirmationScreen(
-                  roomId: room.id,
-                  isCreator: false,
-                ),
-              ),
-            );
-          });
-        }
-
-        return Scaffold(
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
           backgroundColor: Colors.white,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            backgroundColor: Colors.white,
-            elevation: 0,
-            title: Text(
-              '방',
-              style: TextStyle(
-                fontFamily: 'WAGURI',
-                fontSize: 30,
-                color: Colors.black,
-              ),
+          elevation: 0,
+          title: Text(
+            '방',
+            style: TextStyle(
+              fontFamily: 'WAGURI',
+              fontSize: 30,
+              color: Colors.black,
             ),
           ),
-          body: Column(
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final userId = users[index];
-                    final isUserCreator = userId == room.creatorUid;
-                    final isCurrentUser = userId == currentUserId;
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios, color: Colors.black87),
+            onPressed: () async {
+              if (currentUserId != null) {
+                final isCreator = (await roomProvider.getRoom(roomId))?.creatorUid == currentUserId;
+                await roomProvider.leaveRoom(roomId, currentUserId, isCreator);
+                
+                if (!context.mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => RoomListScreen()),
+                  (route) => false,
+                );
+              }
+            },
+          ),
+        ),
+        body: StreamBuilder<RoomModel?>(
+          stream: roomProvider.getRoomStream(roomId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator());
+            }
 
-                    return FutureBuilder<String?>(
-                      future: authProvider.getUserEmail(userId),
-                      builder: (context, emailSnapshot) {
-                        if (emailSnapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return Center(child: CircularProgressIndicator());
-                        }
+            if (snapshot.hasError) {
+              return Center(child: Text('오류가 발생했습니다.'));
+            }
 
-                        final userEmail = emailSnapshot.data ?? 'Unknown';
-
-                        return Padding(
-                          padding:
-                              EdgeInsets.symmetric(horizontal: 24, vertical: 6),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
+            if (!snapshot.hasData || snapshot.data == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final wasSettlementCompleted = await roomProvider.wasSettlementCompleted(roomId);
+                
+                if (!context.mounted) return;
+                if (currentUserId != snapshot.data?.creatorUid) {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: Text(
+                          wasSettlementCompleted ? '정산 완료' : '알림',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontFamily: 'Pretendard',
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        content: Text(
+                          wasSettlementCompleted 
+                            ? '정산이 완료되었습니다.'
+                            : '방장이 방을 나갔습니다.',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontFamily: 'Pretendard',
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (context) => RoomListScreen()),
+                                (route) => false,
+                              );
+                            },
+                            child: Text(
+                              '확인',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontFamily: 'Pretendard',
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF4A55A2),
+                              ),
                             ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[50],
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.grey[200]!),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFF4A55A2).withOpacity(0.1),
-                                    shape: BoxShape.circle,
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                } else {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => RoomListScreen()),
+                    (route) => false,
+                  );
+                }
+              });
+              return Center(child: CircularProgressIndicator());
+            }
+
+            final room = snapshot.data!;
+            bool isCreator = room.creatorUid == currentUserId;
+            final users = room.users;
+
+            if (room.isSettling && !isCreator) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SettlementConfirmationScreen(
+                      roomId: room.id,
+                      isCreator: false,
+                    ),
+                  ),
+                );
+              });
+            }
+
+            return Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      final userId = users[index];
+                      final isUserCreator = userId == room.creatorUid;
+                      final isCurrentUser = userId == currentUserId;
+
+                      return FutureBuilder<String?>(
+                        future: authProvider.getUserEmail(userId),
+                        builder: (context, emailSnapshot) {
+                          if (emailSnapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
+
+                          final userEmail = emailSnapshot.data ?? 'Unknown';
+
+                          return Padding(
+                            padding:
+                                EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.grey[200]!),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Color(0xFF4A55A2).withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.person,
+                                      color: Color(0xFF4A55A2),
+                                      size: 20,
+                                    ),
                                   ),
-                                  child: Icon(
-                                    Icons.person,
-                                    color: Color(0xFF4A55A2),
-                                    size: 20,
-                                  ),
-                                ),
-                                SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            userEmail,
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontFamily: 'Pretendard',
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.black87,
+                                  SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              userEmail,
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontFamily: 'Pretendard',
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.black87,
+                                              ),
                                             ),
-                                          ),
-                                          SizedBox(width: 8),
-                                          if (isCurrentUser) ...[
-                                            Container(
-                                              padding: EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 4,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[200],
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                              child: Text(
-                                                '나',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontFamily: 'Pretendard',
-                                                  fontWeight: FontWeight.w500,
-                                                  color: Colors.black54,
+                                            SizedBox(width: 8),
+                                            if (isCurrentUser) ...[
+                                              Container(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[200],
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  '나',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontFamily: 'Pretendard',
+                                                    fontWeight: FontWeight.w500,
+                                                    color: Colors.black54,
+                                                  ),
                                                 ),
                                               ),
-                                            ),
+                                            ],
                                           ],
-                                        ],
-                                      ),
-                                      if (isUserCreator) ...[
-                                        SizedBox(height: 4),
-                                        Text(
-                                          '방장',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontFamily: 'Pretendard',
-                                            fontWeight: FontWeight.w500,
-                                            color: Color(0xFF4A55A2),
-                                          ),
                                         ),
+                                        if (isUserCreator) ...[
+                                          SizedBox(height: 4),
+                                          Text(
+                                            '방장',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontFamily: 'Pretendard',
+                                              fontWeight: FontWeight.w500,
+                                              color: Color(0xFF4A55A2),
+                                            ),
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Column(
+                    children: [
+                      if (isCreator) ...[
+                        Container(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: () => _settleCosts(context, room),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color(0xFF4A55A2),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '정산하기',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontFamily: 'Pretendard',
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 16,
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                child: Column(
-                  children: [
-                    if (isCreator) ...[
-                      Container(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: () => _settleCosts(context, room),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF4A55A2),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '정산하기',
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontFamily: 'Pretendard',
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.3,
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 16,
-                              ),
-                            ],
-                          ),
                         ),
-                      ),
-                      SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        height: 56,
-                        child: OutlinedButton(
-                          onPressed: () =>
-                              _showLeaveConfirmation(context, room),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Color(0xFF4A55A2)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                        SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          height: 56,
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              if (currentUserId != null) {
+                                await roomProvider.leaveRoom(roomId, currentUserId, isCreator);
+                                
+                                if (!context.mounted) return;
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (context) => RoomListScreen()),
+                                  (route) => false,
+                                );
+                              }
+                            },
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: Color(0xFF4A55A2)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            '나가기',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontFamily: 'Pretendard',
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF4A55A2),
-                              letterSpacing: -0.3,
+                            child: Text(
+                              '나가기',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontFamily: 'Pretendard',
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF4A55A2),
+                                letterSpacing: -0.3,
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -371,7 +463,7 @@ class RoomScreen extends StatelessWidget {
           false;
 
       if (result) {
-        await roomProvider.deleteRoom(roomId);
+        await roomProvider.leaveRoom(roomId, userId, true);
         Navigator.pushNamedAndRemoveUntil(
           context,
           '/rooms',
@@ -380,7 +472,7 @@ class RoomScreen extends StatelessWidget {
       }
       return false;
     } else {
-      await roomProvider.leaveRoom(roomId, userId);
+      await roomProvider.leaveRoom(roomId, userId, false);
       Navigator.pop(context);
       return true;
     }
@@ -412,61 +504,72 @@ class RoomScreen extends StatelessWidget {
     }
   }
 
-  void _showLeaveConfirmation(BuildContext context, RoomModel room) {
+  void _showLeaveConfirmationDialog(BuildContext context, bool isCreator) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          '방 나가기',
-          style: TextStyle(
-            fontSize: 20,
-            fontFamily: 'Pretendard',
-            fontWeight: FontWeight.w700,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
-        ),
-        content: Text(
-          '정말로 방을 나가시겠습니까?\n방장이 나가면 방이 삭제됩니다.',
-          style: TextStyle(
-            fontSize: 16,
-            fontFamily: 'Pretendard',
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              '취소',
-              style: TextStyle(
-                color: Colors.black54,
-                fontFamily: 'Pretendard',
-                fontWeight: FontWeight.w500,
-              ),
+          title: Text(
+            '방 나가기',
+            style: TextStyle(
+              fontSize: 20,
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w600,
             ),
           ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context); // 다이얼로그 닫기
-              final roomProvider =
-                  Provider.of<RoomProvider>(context, listen: false);
-              await roomProvider.deleteRoom(room.id); // 방 삭제
-              if (!context.mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => RoomListScreen()),
-                (route) => false,
-              );
-            },
-            child: Text(
-              '나가기',
-              style: TextStyle(
-                color: Colors.red,
-                fontFamily: 'Pretendard',
-                fontWeight: FontWeight.w500,
-              ),
+          content: Text(
+            isCreator ? '방장이 나가면 방이 삭제됩니다.\n정말 나가시겠습니까?' : '정말 나가시겠습니까?',
+            style: TextStyle(
+              fontSize: 16,
+              fontFamily: 'Pretendard',
+              fontWeight: FontWeight.w400,
             ),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                '취소',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                final roomProvider = Provider.of<RoomProvider>(context, listen: false);
+                final userId = Provider.of<AuthProvider>(context, listen: false).user!.uid;
+                
+                Navigator.of(context).pop(); // 다이얼로그 닫기
+                
+                await roomProvider.leaveRoom(roomId, userId, isCreator);
+                
+                if (!context.mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => RoomListScreen()),
+                  (route) => false,
+                );
+              },
+              child: Text(
+                '나가기',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontFamily: 'Pretendard',
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4A55A2),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

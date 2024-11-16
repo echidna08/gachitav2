@@ -5,24 +5,54 @@ import '../services/firebase_service.dart';
 import '../providers/mileage_provider.dart';
 
 class AuthProvider with ChangeNotifier {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseService _firebaseService = FirebaseService();
   UserModel? _user;
-  Map<String, String> _userEmails = {}; // uid to email mapping
+  Map<String, String> _userEmails = {};
 
   UserModel? get user => _user;
 
   Future<void> signIn(
       String email, String password, MileageProvider mileageProvider) async {
     try {
-      User? firebaseUser = await _firebaseService.signIn(email, password);
-      if (firebaseUser != null) {
-        _user = await _firebaseService.getUserData(firebaseUser.uid);
-        await mileageProvider.initializeUserMileage();
-        notifyListeners();
+      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      if (userCredential.user != null) {
+        _user = await _firebaseService.getUserData(userCredential.user!.uid);
+        if (_user != null) {
+          await mileageProvider.initializeUserMileage();
+          notifyListeners();
+        } else {
+          throw '사용자 정보를 불러올 수 없습니다.';
+        }
       }
     } catch (e) {
-      print(e);
-      rethrow;
+      print('Login error: $e'); // 디버깅을 위한 로그
+      if (e.toString().contains('503')) {
+        await Future.delayed(Duration(seconds: 2));
+        try {
+          final UserCredential userCredential = 
+              await _auth.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          
+          if (userCredential.user != null) {
+            _user = await _firebaseService.getUserData(userCredential.user!.uid);
+            if (_user != null) {
+              await mileageProvider.initializeUserMileage();
+              notifyListeners();
+            }
+          }
+        } catch (retryError) {
+          throw '서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.';
+        }
+      } else {
+        throw e.toString();
+      }
     }
   }
 

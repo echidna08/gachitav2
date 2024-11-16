@@ -68,18 +68,24 @@ class RoomProvider with ChangeNotifier {
   }
 
   // 방 나가기
-  Future<void> leaveRoom(String roomId, String userId) async {
+  Future<void> leaveRoom(String roomId, String userId, bool isCreator) async {
     try {
-      DocumentSnapshot room =
-          await _firestore.collection('rooms').doc(roomId).get();
+      DocumentSnapshot room = await _firestore.collection('rooms').doc(roomId).get();
       if (room.exists) {
-        await _firestore.collection('rooms').doc(roomId).update({
-          'users': FieldValue.arrayRemove([userId]),
-        });
+        if (isCreator) {
+          // 방장이 나가면 방 삭제
+          await _firestore.collection('rooms').doc(roomId).delete();
+        } else {
+          // 일반 참가자가 나가면 users 배열에서 제거
+          await _firestore.collection('rooms').doc(roomId).update({
+            'users': FieldValue.arrayRemove([userId]),
+          });
+        }
         notifyListeners();
       }
     } catch (e) {
       print('Error leaving room: $e');
+      throw e;
     }
   }
 
@@ -157,6 +163,70 @@ class RoomProvider with ChangeNotifier {
     } catch (e) {
       print('Error starting settlement: $e');
       throw e;
+    }
+  }
+
+  Future<void> completeSettlement(String roomId) async {
+    try {
+      // 방 정보 가져오기
+      DocumentSnapshot roomDoc = await _firestore.collection('rooms').doc(roomId).get();
+      Map<String, dynamic> roomData = roomDoc.data() as Map<String, dynamic>;
+      
+      String creatorUid = roomData['creatorUid'];
+      int totalAmount = 4800;
+      int numberOfUsers = (roomData['users'] as List).length;
+      int amountPerPerson = totalAmount ~/ numberOfUsers;
+      int creatorReceiveAmount = amountPerPerson * (numberOfUsers - 1);
+      
+      // 방장의 마일리지 증가
+      await _firestore.runTransaction((transaction) async {
+        DocumentReference creatorRef = _firestore.collection('users').doc(creatorUid);
+        DocumentSnapshot creatorDoc = await transaction.get(creatorRef);
+        
+        if (!creatorDoc.exists) {
+          throw Exception('Creator user document not found');
+        }
+        
+        Map<String, dynamic> creatorData = creatorDoc.data() as Map<String, dynamic>;
+        int currentMileage = creatorData['mileage'] ?? 0;
+        transaction.update(creatorRef, {
+          'mileage': currentMileage + creatorReceiveAmount
+        });
+      });
+      
+      // 정산 완료 기록 저장
+      await _firestore.collection('completedSettlements').doc(roomId).set({
+        'completedAt': FieldValue.serverTimestamp(),
+        'creatorUid': creatorUid,
+        'amountReceived': creatorReceiveAmount,
+      });
+      
+      // 방 삭제
+      await _firestore.collection('rooms').doc(roomId).delete();
+      
+      // 5분 후에 completedSettlements 기록 삭제
+      Future.delayed(Duration(minutes: 5), () async {
+        await _firestore.collection('completedSettlements').doc(roomId).delete();
+      });
+    } catch (e) {
+      print('Error completing settlement: $e');
+      throw e;
+    }
+  }
+
+  // 방이 정산 완료로 인해 삭제되었는지 확인하는 메서드
+  Future<bool> wasSettlementCompleted(String roomId) async {
+    try {
+      // 최근에 정산 완료된 방들의 ID를 저장하는 컬렉션 확인
+      DocumentSnapshot doc = await _firestore
+          .collection('completedSettlements')
+          .doc(roomId)
+          .get();
+      
+      return doc.exists;
+    } catch (e) {
+      print('Error checking settlement status: $e');
+      return false;
     }
   }
 }

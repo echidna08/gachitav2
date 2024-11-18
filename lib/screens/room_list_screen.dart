@@ -106,11 +106,10 @@ class RoomListScreen extends StatelessWidget {
             List<RoomModel> rooms = snapshot.data!;
             return Padding(
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: ListView.separated(
+              child: ListView.builder(
                 itemCount: rooms.length,
-                separatorBuilder: (context, index) => SizedBox(height: 12),
                 itemBuilder: (context, index) {
-                  RoomModel room = rooms[index];
+                  final room = rooms[index];
                   bool isCreator = room.creatorUid == currentUserId;
                   bool isCurrentUserInRoom = room.users.contains(currentUserId);
 
@@ -119,127 +118,98 @@ class RoomListScreen extends StatelessWidget {
                     builder: (context, creatorSnapshot) {
                       String creatorEmail = creatorSnapshot.data ?? 'Loading...';
 
-                      return InkWell(
-                        onTap: () => _joinRoom(context, room, currentUserId!),
-                        child: Container(
-                          padding: EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.grey[200]!),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Color(0xFF4A55A2).withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.groups_rounded,
-                                  color: Color(0xFF4A55A2),
-                                  size: 24,
-                                ),
-                              ),
-                              SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+                      return Container(
+                        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Material(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => _joinRoom(context, room, currentUserId!),
+                            child: Container(
+                              padding: EdgeInsets.all(16),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Row(
                                       children: [
-                                        Text(
-                                          room.title,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontFamily: 'Pretendard',
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
+                                        Container(
+                                          padding: EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Color(0xFF4A55A2).withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.groups_rounded,
+                                            color: Color(0xFF4A55A2),
+                                            size: 24,
                                           ),
                                         ),
-                                        if (isCurrentUserInRoom) ...[
-                                          SizedBox(width: 8),
-                                          Container(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[200],
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              '나',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontFamily: 'Pretendard',
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.black54,
+                                        SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                room.title,
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontFamily: 'Pretendard',
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.black87,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          '방장: $creatorEmail',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontFamily: 'Pretendard',
-                                            fontWeight: FontWeight.w400,
-                                            color: Colors.black54,
+                                              SizedBox(height: 4),
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    '${room.users.length}/4',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      fontFamily: 'Pretendard',
+                                                      color: Colors.black54,
+                                                    ),
+                                                  ),
+                                                  if (room.creatorUid == currentUserId) ...[
+                                                    SizedBox(width: 8),
+                                                    Container(
+                                                      padding: EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 2,
+                                                      ),
+                                                      decoration: BoxDecoration(
+                                                        color: Color(0xFFEEF0F8),
+                                                        borderRadius: BorderRadius.circular(12),
+                                                      ),
+                                                      child: Text(
+                                                        '방장',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontFamily: 'Pretendard',
+                                                          color: Color(0xFF4A55A2),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        if (isCreator) ...[
-                                          SizedBox(width: 8),
-                                          Container(
-                                            padding: EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Color(0xFF4A55A2)
-                                                  .withOpacity(0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              '방장',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontFamily: 'Pretendard',
-                                                fontWeight: FontWeight.w500,
-                                                color: Color(0xFF4A55A2),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
                                       ],
                                     ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      '참가자: ${room.users.length}/4',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontFamily: 'Pretendard',
-                                        fontWeight: FontWeight.w400,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Colors.grey[400],
+                                    size: 16,
+                                  ),
+                                ],
                               ),
-                              Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 16,
-                                color: Color(0xFF4A55A2),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       );
@@ -402,12 +372,13 @@ class RoomListScreen extends StatelessWidget {
 
     if (room.users.length < 4 && !room.users.contains(userId)) {
       await roomProvider.joinRoom(room.id, userId);
-      Navigator.push(
+      if (!context.mounted) return;
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => RoomScreen(roomId: room.id)),
       );
     } else if (room.users.contains(userId)) {
-      Navigator.push(
+      Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => RoomScreen(roomId: room.id)),
       );

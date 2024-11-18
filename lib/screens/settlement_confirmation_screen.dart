@@ -31,9 +31,7 @@ class SettlementConfirmationScreen extends StatelessWidget {
         stream: roomProvider.getRoomStream(roomId),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data == null) {
-            return Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+            return Center(child: CircularProgressIndicator());
           }
 
           final room = snapshot.data!;
@@ -66,15 +64,6 @@ class SettlementConfirmationScreen extends StatelessWidget {
             });
           }
 
-          if (!room.isSettling && isCreator) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => RoomListScreen()),
-                (route) => false,
-              );
-            });
-          }
-
           return Scaffold(
             appBar: AppBar(
               title: Text(
@@ -91,9 +80,7 @@ class SettlementConfirmationScreen extends StatelessWidget {
               leading: IconButton(
                 icon: Icon(Icons.arrow_back_ios, color: Colors.black87),
                 onPressed: () {
-                  if (Navigator.canPop(context)) {
-                    Navigator.pop(context);
-                  }
+                  Navigator.pop(context);
                 },
               ),
             ),
@@ -328,30 +315,42 @@ class SettlementConfirmationScreen extends StatelessWidget {
       final roomProvider = Provider.of<RoomProvider>(context, listen: false);
       final userId = Provider.of<AuthProvider>(context, listen: false).user!.uid;
 
-      // 택시비 총액
-      int totalAmount = 4800;  // 실제 택시비로 수정
-      
-      // 인원수로 나누기
+      int totalAmount = 4800;
       int numberOfUsers = room.users.length;
       int amountPerPerson = totalAmount ~/ numberOfUsers;
 
-      // 인당 금액만큼 차감
       await mileageProvider.deductMileage(amountPerPerson);
-
       await roomProvider.updatePaymentStatus(room.id, userId, true);
+
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('송금 완료'),
+            content: Text('송금이 완료되었습니다.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => RoomListScreen()),
+                    (route) => false,
+                  );
+                },
+                child: Text('확인'),
+              ),
+            ],
+          );
+        },
+      );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '송금 처리 중 오류가 발생했습니다',
-            style: TextStyle(
-              fontFamily: 'Pretendard',
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          content: Text('송금 처리 중 오류가 발생했습니다'),
           backgroundColor: Colors.red[400],
-          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -361,48 +360,71 @@ class SettlementConfirmationScreen extends StatelessWidget {
     try {
       final roomProvider = Provider.of<RoomProvider>(context, listen: false);
       
-      // 방 삭제 처리
-      await roomProvider.completeSettlement(roomId);
-
-      if (!context.mounted) return;
-
-      // 방 목록으로 이동하기 전에 스낵바 표시
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '정산이 완료되었습니다',
-            style: TextStyle(
-              fontFamily: 'Pretendard',
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          backgroundColor: Colors.green[400],
-          duration: Duration(seconds: 2),
-        ),
-      );
-
-      // 잠시 대기 후 화면 이동 (스낵바가 보일 수 있도록)
-      await Future.delayed(Duration(milliseconds: 500));
+      // 모든 사용자가 결제했는지 확인
+      final room = await roomProvider.getRoom(roomId);
+      if (room == null) return;
       
+      final allPaid = room.users.every((userId) =>
+          userId == room.creatorUid || (room.payments[userId] ?? false));
+          
+      if (!allPaid) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('모든 참가자의 송금이 완료되어야 합니다'),
+            backgroundColor: Colors.red[400],
+          ),
+        );
+        return;
+      }
+
       if (!context.mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => RoomListScreen()),
-        (route) => false,
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            title: Text('정산 완료'),
+            content: Text('정산이 완료되었습니다.'),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  try {
+                    // 다이얼로그를 먼저 닫고
+                    Navigator.pop(dialogContext);
+                    
+                    // 방 목록 화면으로 이동
+                    if (!context.mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (context) => RoomListScreen()),
+                      (route) => false,
+                    );
+                    
+                    // 그 다음에 정산 완료 처리
+                    await roomProvider.completeSettlement(roomId);
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('정산 완료 처리 중 오류가 발생했습니다'),
+                        backgroundColor: Colors.red[400],
+                      ),
+                    );
+                  }
+                },
+                child: Text('확인'),
+              ),
+            ],
+          );
+        },
       );
     } catch (e) {
-      print('Settlement error: $e');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '정산 완료 처리 중 오류가 발생했습니다',
-            style: TextStyle(
-              fontFamily: 'Pretendard',
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          content: Text('정산 완료 처리 중 오류가 발생했습니다'),
           backgroundColor: Colors.red[400],
-          duration: Duration(seconds: 2),
         ),
       );
     }
